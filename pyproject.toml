@@ -1,0 +1,9 @@
+[project]
+name = "ag-ui-demo"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "codex-python>=1.153.4",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
+]

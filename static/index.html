@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex × A2UI Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif; background: #f3f4f6; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #111827; color: #fff; padding: 10px 20px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+  header .badge { font-size: 12px; color: #9ca3af; }
+  main { flex: 1; display: grid; grid-template-columns: 380px 1fr; gap: 12px; padding: 12px; min-height: 0; }
+  .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; display: flex; flex-direction: column; min-height: 0; }
+  .panel h2 { font-size: 13px; color: #6b7280; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: .05em; }
+  /* chat */
+  #chat-log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 90%; padding: 8px 12px; border-radius: 10px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: #2563eb; color: #fff; }
+  .msg.assistant { align-self: flex-start; background: #f3f4f6; border: 1px solid #e5e7eb; }
+  .msg.action { align-self: flex-end; background: #ede9fe; color: #5b21b6; font-size: 13px; }
+  .msg.error { align-self: flex-start; background: #fee2e2; color: #b91c1c; }
+  .msg.activity { align-self: flex-start; background: none; color: #9ca3af; font-size: 12px; padding: 2px 8px; }
+  .msg.json { align-self: stretch; max-width: 100%; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 12px; padding: 6px 10px; }
+  .msg.json summary { cursor: pointer; color: #059669; font-weight: 600; }
+  .msg.json pre { margin-top: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: #334155; max-height: 260px; overflow-y: auto; }
+  #chat-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e5e7eb; }
+  #chat-input input { flex: 1; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; }
+  #chat-input button { padding: 9px 18px; background: #2563eb; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  #chat-input button:disabled { background: #93c5fd; cursor: wait; }
+  /* surface */
+  #surface-wrap { flex: 1; overflow-y: auto; padding: 16px; }
+  #surface-empty { color: #9ca3af; font-size: 14px; text-align: center; margin-top: 40px; }
+  .surface { border: 1px dashed #d1d5db; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .surface .sid { font-size: 11px; color: #9ca3af; margin-bottom: 8px; }
+  /* A2UI components */
+  .a2ui-column { display: flex; flex-direction: column; gap: 10px; }
+  .a2ui-row { display: flex; flex-direction: row; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .a2ui-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .a2ui-card-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .a2ui-text.h1 { font-size: 24px; font-weight: 700; }
+  .a2ui-text.h2 { font-size: 18px; font-weight: 600; }
+  .a2ui-text.body { font-size: 14px; }
+  .a2ui-text.caption { font-size: 12px; color: #6b7280; }
+  .a2ui-image { max-width: 100%; border-radius: 8px; }
+  .a2ui-field { display: flex; flex-direction: column; gap: 4px; }
+  .a2ui-field label { font-size: 13px; color: #374151; }
+  .a2ui-field input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 14px; }
+  .a2ui-button { padding: 8px 20px; background: #2563eb; color: #fff; border: none; border-radius: 7px; cursor: pointer; font-size: 14px; align-self: flex-start; }
+  .a2ui-button:hover { background: #1d4ed8; }
+  .a2ui-unknown { color: #b91c1c; font-size: 12px; }
+  /* raw log */
+  details { background: #111827; color: #d1d5db; max-height: 180px; display: flex; flex-direction: column; }
+  summary { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #9ca3af; }
+  #raw-log { overflow-y: auto; padding: 4px 16px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6; }
+  #raw-log div { white-space: pre-wrap; word-break: break-all; }
+  #raw-log .a2ui { color: #6ee7b7; }
+  #raw-log .chat { color: #93c5fd; }
+  #raw-log .error { color: #fca5a5; }
+</style>
+</head>
+<body>
+<header>
+  <span>Codex × A2UI Demo</span>
+  <span class="badge">Codex SDK 生成 A2UI JSONL → 本地渲染器渲染</span>
+</header>
+<main>
+  <section class="panel">
+    <h2>对话 / 活动</h2>
+    <div id="chat-log"></div>
+    <div id="chat-input">
+      <input id="input" placeholder="例如：帮我做一个订餐表单" autofocus>
+      <button id="send">发送</button>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>生成的 UI（A2UI Surface）</h2>
+    <div id="surface-wrap"><div id="surface-empty">向 agent 描述你想要的界面，UI 将在这里渐进式生成</div></div>
+  </section>
+</main>
+<details>
+  <summary>原始协议消息（A2UI JSONL / 事件日志）</summary>
+  <div id="raw-log"></div>
+</details>
+
+<script>
+const sessionId = 's-' + Math.random().toString(36).slice(2, 10);
+const surfaces = {}; // surfaceId -> {components: {}, data: {}}
+const chatLog = document.getElementById('chat-log');
+const surfaceWrap = document.getElementById('surface-wrap');
+const rawLog = document.getElementById('raw-log');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+
+// ---------- JSON Pointer ----------
+function parsePointer(path) {
+  return (path || '/').split('/').filter(Boolean).map(s => s.replace(/~1/g, '/').replace(/~0/g, '~'));
+}
+function getPath(obj, path) {
+  let cur = obj;
+  for (const key of parsePointer(path)) {
+    if (cur == null) return undefined;
+    cur = cur[key];
+  }
+  return cur;
+}
+function setPath(obj, path, value, deleteMode) {
+  const keys = parsePointer(path);
+  if (keys.length === 0) {
+    if (!deleteMode && value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.keys(obj).forEach(k => delete obj[k]);
+      Object.assign(obj, value);
+    }
+    return;
+  }
+  let cur = obj;
+  for (const key of keys.slice(0, -1)) {
+    if (cur[key] == null || typeof cur[key] !== 'object') cur[key] = {};
+    cur = cur[key];
+  }
+  if (deleteMode) delete cur[keys.at(-1)]; else cur[keys.at(-1)] = value;
+}
+
+// ---------- A2UI 状态机 ----------
+function applyA2UI(msg) {
+  const key = Object.keys(msg).find(k => k !== 'version');
+  const body = msg[key];
+  if (!key || !body) return;
+  const sid = body.surfaceId;
+  if (key === 'createSurface') {
+    surfaces[sid] = { components: {}, data: {}, catalogId: body.catalogId };
+    renderSurface(sid);
+  } else if (key === 'updateComponents') {
+    const s = surfaces[sid]; if (!s) return;
+    for (const c of body.components || []) s.components[c.id] = c;
+    renderSurface(sid);
+  } else if (key === 'updateDataModel') {
+    const s = surfaces[sid]; if (!s) return;
+    setPath(s.data, body.path || '/', body.value, !('value' in body));
+    renderSurface(sid, true);
+  } else if (key === 'deleteSurface') {
+    delete surfaces[sid];
+    document.getElementById('surface-' + sid)?.remove();
+    toggleEmpty();
+  }
+}
+
+function resolve(value, data) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'path' in value) {
+    const v = getPath(data, value.path);
+    return v == null ? '' : String(v);
+  }
+  return value;
+}
+
+function renderComponent(id, surface, sid) {
+  const c = surface.components[id];
+  if (!c) return document.createTextNode('');
+  const data = surface.data;
+  switch (c.component) {
+    case 'Column': case 'Row': {
+      const el = document.createElement('div');
+      el.className = c.component === 'Column' ? 'a2ui-column' : 'a2ui-row';
+      for (const childId of c.children || []) el.appendChild(renderComponent(childId, surface, sid));
+      return el;
+    }
+    case 'Card': {
+      const el = document.createElement('div');
+      el.className = 'a2ui-card';
+      if (c.title) {
+        const t = document.createElement('div');
+        t.className = 'a2ui-card-title';
+        t.textContent = resolve(c.title, data);
+        el.appendChild(t);
+      }
+      if (c.child) el.appendChild(renderComponent(c.child, surface, sid));
+      return el;
+    }
+    case 'Text': {
+      const variant = c.variant || 'body';
+      const tag = variant === 'h1' ? 'h1' : variant === 'h2' ? 'h2' : 'div';
+      const el = document.createElement(tag);
+      el.className = 'a2ui-text ' + variant;
+      el.textContent = resolve(c.text, data);
+      return el;
+    }
+    case 'Image': {
+      const el = document.createElement('img');
+      el.className = 'a2ui-image';
+      el.src = resolve(c.url, data);
+      el.alt = c.alt || '';
+      return el;
+    }
+    case 'Divider': return document.createElement('hr');
+    case 'TextField': {
+      const wrap = document.createElement('div');
+      wrap.className = 'a2ui-field';
+      const label = document.createElement('label');
+      label.textContent = c.label || '';
+      const el = document.createElement('input');
+      el.value = getPath(data, c.bindingPath || '/') ?? '';
+      el.placeholder = c.placeholder || '';
+      el.addEventListener('input', () => setPath(data, c.bindingPath || '/', el.value));
+      wrap.append(label, el);
+      return wrap;
+    }
+    case 'Button': {
+      const el = document.createElement('button');
+      el.className = 'a2ui-button';
+      el.textContent = resolve(c.label, data) || 'Button';
+      el.addEventListener('click', () => fireAction(sid, c.action || {}));
+      return el;
+    }
+    default: {
+      const el = document.createElement('div');
+      el.className = 'a2ui-unknown';
+      el.textContent = `[未知组件: ${c.component}]`;
+      return el;
+    }
+  }
+}
+
+function renderSurface(sid, keepFocus) {
+  toggleEmpty();
+  const surface = surfaces[sid];
+  if (!surface) return;
+  let box = document.getElementById('surface-' + sid);
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'surface';
+    box.id = 'surface-' + sid;
+    const label = document.createElement('div');
+    label.className = 'sid';
+    label.textContent = 'surface: ' + sid;
+    box.appendChild(label);
+    surfaceWrap.appendChild(box);
+  }
+  const active = keepFocus ? document.activeElement : null;
+  const activePath = active && active.tagName === 'INPUT' ? active.closest('.a2ui-field') : null;
+  const old = box.querySelector('.a2ui-root');
+  old?.remove();
+  const root = document.createElement('div');
+  root.className = 'a2ui-root';
+  if (surface.components.root) root.appendChild(renderComponent('root', surface, sid));
+  box.appendChild(root);
+  if (activePath) { /* 数据更新导致的重渲染不抢输入焦点 */ }
+}
+
+function toggleEmpty() {
+  document.getElementById('surface-empty')?.remove();
+}
+
+// ---------- 网络 ----------
+async function streamEvents(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+    body: JSON.stringify(body),
+  });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data:')) handleEvent(JSON.parse(line.slice(5)));
+      }
+    }
+  }
+}
+
+function handleEvent(ev) {
+  if (ev.kind === 'a2ui') {
+    logRaw(JSON.stringify(ev.message), 'a2ui');
+    applyA2UI(ev.message);
+    addJsonMsg(ev.message);
+  } else if (ev.kind === 'chat') {
+    logRaw(ev.text, 'chat');
+    addMsg(ev.text, 'assistant');
+  } else if (ev.kind === 'activity') {
+    addMsg(ev.text, 'activity');
+  } else if (ev.kind === 'error') {
+    logRaw(ev.message, 'error');
+    addMsg('错误: ' + ev.message, 'error');
+  }
+}
+
+async function sendChat() {
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+  addMsg(message, 'user');
+  setBusy(true);
+  try {
+    await streamEvents('/chat', { sessionId, message });
+  } catch (e) {
+    addMsg('网络错误: ' + e.message, 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function fireAction(sid, action) {
+  const surface = surfaces[sid];
+  const context = {};
+  for (const [k, v] of Object.entries(action.context || {})) context[k] = resolve(v, surface.data);
+  addMsg(`触发动作: ${action.name} ${JSON.stringify(context)}`, 'action');
+  setBusy(true);
+  try {
+    await streamEvents('/action', {
+      sessionId, surfaceId: sid, actionName: action.name, context, dataModel: surface.data,
+    });
+  } catch (e) {
+    addMsg('网络错误: ' + e.message, 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ---------- DOM helpers ----------
+function addMsg(text, cls) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + cls;
+  el.textContent = text;
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function addJsonMsg(message) {
+  const type = Object.keys(message).find(k => k !== 'version') || 'unknown';
+  const el = document.createElement('details');
+  el.className = 'msg json';
+  const summary = document.createElement('summary');
+  summary.textContent = `A2UI 消息: ${type}`;
+  const pre = document.createElement('pre');
+  pre.textContent = JSON.stringify(message, null, 2);
+  el.append(summary, pre);
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function logRaw(text, cls) {
+  const el = document.createElement('div');
+  el.className = cls || '';
+  el.textContent = text;
+  rawLog.appendChild(el);
+  rawLog.scrollTop = rawLog.scrollHeight;
+}
+function setBusy(busy) {
+  sendBtn.disabled = busy;
+  sendBtn.textContent = busy ? '生成中…' : '发送';
+}
+
+sendBtn.addEventListener('click', sendChat);
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !sendBtn.disabled) sendChat(); });
+</script>
+</body>
+</html>
