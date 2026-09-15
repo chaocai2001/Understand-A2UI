@@ -79,18 +79,123 @@ UI 不是嵌套树，而是**扁平的组件列表**，组件之间用 id 互相
   2. **渲染**：`renderComponent()` 把组件类型映射为原生 HTML，属性经 `resolve()` 做数据绑定；
   3. **回传**：按钮点击时解析 action context，POST 回 `/action`。
 
-## 4. 一次完整交互的走查
+## 4. 具体运行实例
 
-输入"帮我做一个订餐表单，包含姓名、菜品两个输入框和一个下单按钮"后，观察页面底部的原始消息日志：
+以下两个实例是本 demo **真实运行抓取的完整交互记录**（SSE 原始输出），逐条对照"传输的 JSON"与"渲染出的 UI"。
 
-1. `createSurface` —— 建立 surface，右侧出现虚线框；
-2. 第一条 `updateComponents` —— 骨架（root/Card/Column）先渲染出来；
-3. 第二条 `updateComponents` —— 输入框和按钮逐个出现（增量）；
-4. `updateDataModel` —— 初始化 `/form` 数据；
-5. 你在表单填入"张三 / 宫保鸡丁"，点击"下单" → 前端把 `submit_order` action + 数据模型 POST 到 `/action`；
-6. agent（同一线程，记得上下文）回复新的 `updateComponents`（追加"下单成功"卡片）和 `updateDataModel`（写入 `/order`），UI 原地增量更新。
+### 实例 1：欢迎卡片 —— 结构与数据分离
 
-左侧对话流里每条 A2UI 消息都有可折叠的 JSON 气泡，可以和右侧渲染结果、底部原始 JSONL 三相对照。
+**用户输入**：`生成一个欢迎卡片，标题 Hello A2UI，正文显示绑定到 /welcome/message 的文本`
+
+agent 通过 SSE 依次推回 4 条消息：
+
+**① 创建 surface** —— 右侧出现一块虚线框的 UI 区域：
+
+```json
+{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"demo-catalog"}}
+```
+
+**② 发送结构骨架** —— 渲染出标题为 "Hello A2UI" 的卡片（正文还是空白）：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["welcome_card"]},{"id":"welcome_card","component":"Card","child":"welcome_content","title":"Hello A2UI"}]}}
+```
+
+**③ 追加正文组件** —— 卡片内出现一行文本，内容暂空（因为数据还没来）。注意 `text` 不是字面量，而是绑定到数据模型的 `/welcome/message`：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"welcome_content","component":"Text","text":{"path":"/welcome/message"},"variant":"body"}]}}
+```
+
+**④ 推送数据** —— 绑定的文本原地变成"欢迎使用 A2UI！"，**不需要重发组件**：
+
+```json
+{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/welcome/message","value":"欢迎使用 A2UI！"}}
+```
+
+最终渲染的 UI：
+
+```
+┌─ surface: main ────────────┐
+│ ┌─ Hello A2UI ───────────┐ │
+│ │ 欢迎使用 A2UI！          │ │
+│ └────────────────────────┘ │
+└────────────────────────────┘
+```
+
+这个实例展示了协议最关键的两个性质：**渐进式渲染**（每条消息到达就渲染，UI 是"长出来"的）和**数据绑定**（结构与数据分离，改数据即可改界面）。
+
+### 实例 2：订餐表单 —— 交互回传的完整闭环
+
+**用户输入**：`帮我做一个订餐表单，包含姓名、菜品两个输入框和一个下单按钮`
+
+**第一轮：`POST /chat`，agent 推回 4 条消息**
+
+① 创建 surface（同实例 1，略）；② 骨架：卡片 + 表单容器：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["order_card"]},{"id":"order_card","component":"Card","child":"order_form","title":"订餐表单"},{"id":"order_form","component":"Column","children":["name_field","dish_field","order_button"]}]}}
+```
+
+③ 两个输入框 + 按钮。`TextField` 的 `bindingPath` 声明"用户输入写进数据模型的哪里"；`Button` 的 `action.context` 声明"点击时把哪些数据回传给 agent"（值同样用 path 绑定，点击瞬间由客户端解析）：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"name_field","component":"TextField","label":"姓名","bindingPath":"/form/name","placeholder":"请输入姓名"},{"id":"dish_field","component":"TextField","label":"菜品","bindingPath":"/form/dish","placeholder":"请输入菜品名称"},{"id":"order_button","component":"Button","label":"下单","action":{"name":"submit_order","context":{"name":{"path":"/form/name"},"dish":{"path":"/form/dish"}}}}]}}
+```
+
+④ 初始化表单数据模型：`{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/form","value":{"name":"","dish":""}}}`
+
+渲染结果：
+
+```
+┌─ 订餐表单 ─────────────┐
+│ 姓名  [ 请输入姓名     ] │
+│ 菜品  [ 请输入菜品名称  ] │
+│ [ 下单 ]               │
+└────────────────────────┘
+```
+
+**用户在 UI 里填入"张三 / 宫保鸡丁"，点击"下单"** → 客户端把 action 和当前数据模型 POST 到 `/action`（这是客户端发给 agent 的 JSON）：
+
+```json
+{"sessionId":"doc-demo-2","surfaceId":"main","actionName":"submit_order",
+ "context":{"name":"张三","dish":"宫保鸡丁"},
+ "dataModel":{"form":{"name":"张三","dish":"宫保鸡丁"}}}
+```
+
+服务端把它组织成自然语言喂给**同一个 Codex 线程**（agent 记得自己之前生成的表单），agent 回复 3 条增量更新：
+
+① 把原卡片就地改造为"下单成功"卡片（同 id `order_card` 即为更新，不是新建）：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"order_card","component":"Card","child":"order_success","title":"下单成功"},{"id":"order_success","component":"Column","children":["success_title","success_name","success_dish"]}]}}
+```
+
+② 追加三个文本组件，后两个绑定到 `/confirmation/*`：
+
+```json
+{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"success_title","component":"Text","text":"订单已提交！","variant":"h2"},{"id":"success_name","component":"Text","text":{"path":"/confirmation/name"},"variant":"body"},{"id":"success_dish","component":"Text","text":{"path":"/confirmation/dish"},"variant":"body"}]}}
+```
+
+③ 回填数据，绑定文本自动显示：
+
+```json
+{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/confirmation","value":{"name":"订餐人：张三","dish":"菜品：宫保鸡丁"}}}
+```
+
+UI 原地更新为：
+
+```
+┌─ 下单成功 ─────────┐
+│ 订单已提交！        │
+│ 订餐人：张三        │
+│ 菜品：宫保鸡丁      │
+└────────────────────┘
+```
+
+闭环完成：**用户输入 → agent 生成 UI → 用户与 UI 交互 → action 回传 → agent 增量更新 UI**。整个过程中客户端没有执行任何 agent 生成的代码，只渲染了预批准目录里的组件。
+
+在页面上，这三个视角可以同时对照：左侧对话流里每条 A2UI 消息有可折叠的 JSON 气泡，右侧是渲染结果，底部是原始 JSONL 日志。
 
 ## 5. 运行
 
